@@ -1,0 +1,9 @@
+*.pdb
+*.xtc
+*.cif
+*.tar.gz
+*.log
+*.txt
+*.trb
+*.out
+*.pyc
