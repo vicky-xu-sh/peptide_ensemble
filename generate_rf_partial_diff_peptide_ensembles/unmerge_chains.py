@@ -42,6 +42,7 @@ def extract_chain_per_residue(original_pdb):
     Returns list of tuples: (chain_id, resseq, icode, resname) in residue order.
     """
     residue_info = []
+    seen = set()
 
     with open(original_pdb, "r") as f:
         
@@ -52,11 +53,7 @@ def extract_chain_per_residue(original_pdb):
             atom_name = line[12:16].strip()
             if atom_name != "CA":
                 continue
-
-            alternate_location = line[16].strip()
-            if alternate_location and alternate_location != "A":
-                continue  # skip alternate locations that are not 'A'
-
+            
             resname = line[17:20].strip()
             if resname not in AA3_TO_1: # skip non-standard residues
                 continue
@@ -64,6 +61,10 @@ def extract_chain_per_residue(original_pdb):
             chain_id = line[21]
             resseq = line[22:26].strip()
 
+            if (chain_id, resseq, resname) in seen:
+                print(f"Warning: Duplicate residue found in original PDB: {(chain_id, resseq, resname)}. Skipping duplicate.")
+                continue  # skip duplicate residues (e.g. due to alternate locations)
+            seen.add((chain_id, resseq, resname))
             residue_info.append((chain_id, resseq, resname))
 
     return residue_info
@@ -224,6 +225,11 @@ if __name__ == "__main__":
 
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
+
+    # Test one
+    # subdir = '2xrw'
+    # print(f"Testing on subdirectory: {subdir}")
+    # process_subdirectory(subdir, args.orig_pdb_dir, args.generated_pdbs_dir, args.output_dir)
 
     # Get all subdirectories
     subdirs = [
