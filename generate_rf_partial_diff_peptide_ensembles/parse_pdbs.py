@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from Bio.PDB import PDBParser
 from Bio.PDB.Polypeptide import is_aa
 import pandas as pd
-from utils import clean_pdb
+from utils import clean_pdb, parse_cif_and_clean, count_chains_in_cif
 
 
 def num_residues_in_chain(chain) -> int:
@@ -140,8 +140,8 @@ def main():
         help="CSV containing PDB/Sequence columns for the complete dataset, used to look up peptide sequences for the subset",
     )
     parser.add_argument(
-        "--pdb-dir",
-        default="subset_pdb_files",
+        "--cif-dir",
+        default="dataset_cif_files",
         help="Directory with the PDB files",
     )
     parser.add_argument(
@@ -153,6 +153,12 @@ def main():
         "--out",
         default="protein_peptide_rep_subset_updated_info.csv",
         help="Output CSV path",
+    )
+    parser.add_argument(
+        "--max-chains",
+        type=int,
+        default=5,
+        help="Skip conversion when CIF has more than this many chains",
     )
     args = parser.parse_args()
 
@@ -166,42 +172,53 @@ def main():
     results = []
 
     for pdb_id in pdb_ids:
-        pdb_path = os.path.join(args.pdb_dir, f"{pdb_id.lower()}.pdb")
-        if not os.path.exists(pdb_path):
-            print(f"\nWarning: PDB file not found for {pdb_id} at {pdb_path}")
+        
+        cif_path = os.path.join(args.cif_dir, f"{pdb_id.lower()}-assembly1.cif")
+        if not os.path.exists(cif_path):
+            print(f"Warning! {cif_path} does not exists! Skipping...")
             continue
 
         print(f"\nProcessing {pdb_id}...")
+
+        # filter out > max chains PDBs
+        chain_count = count_chains_in_cif(cif_path)
+        if chain_count > args.max_chains:
+            print(f"Skipping {pdb_id} due to too many chains: {chain_count} chains found")
+            continue
 
         peptide_seqs = peptide_info.get(pdb_id.upper(), [("", "")])
         if len(peptide_seqs) > 1:
             print(f"Multiple peptide chains found for {pdb_id}, processing all.")
 
+        # read and parse the original cif files instead of converted pdb files 
+        # (and skip the earlier step of running ./curate_dataset/convert_cif_to_pdbs.py)
+        # During parsing, also save the chain mappings, and possibly entity dictionary for later use
+
         for i, peptide_seq_tuple in enumerate(peptide_seqs):
             pdb_id = pdb_id.split("_dup")[0]  # remove any existing _dup suffix
-            pdb_path = os.path.join(args.pdb_dir, f"{pdb_id.lower()}.pdb") # the original pdb file
-            
+
             if i > 0:
                 pdb_id = f"{pdb_id}_dup{i}"
-            
+
             old_peptide_chain_id, peptide_seq = peptide_seq_tuple
-            # Gemmi probably shortened the chain ID
-            if len(old_peptide_chain_id) > 1:
-                old_peptide_chain_id = old_peptide_chain_id[0]
 
             cleaned_pdb_path = os.path.join(args.cleaned_pdb_dir, f"{pdb_id.lower()}.pdb")
 
-            new_pep_chains_mapping = clean_pdb(pdb_path, cleaned_pdb_path, old_peptide_chain_id)
-            if not new_pep_chains_mapping or old_peptide_chain_id not in new_pep_chains_mapping:
-                print(f"Error: No new peptide chain IDs found for {pdb_id} after cleaning. Skipping this PDB.")
+            old_to_new_chain_label_ids, entities = parse_cif_and_clean(cif_path, cleaned_pdb_path, old_peptide_chain_id)
+            if old_to_new_chain_label_ids is None or entities is None:
+                print(f"Warning! Skipping {pdb_id} as parsing and cleaning failed.")
                 continue
+            print(f"Chain ID mapping for {pdb_id}: {old_to_new_chain_label_ids}")
+            print(f"Entity mapping for {pdb_id}: {entities}")
             
+            if entities['A'] != 0:
+                print(f"Warning: Expected peptide chain to be mapped to entity 0, but got {entities['A']} for {pdb_id}")
+                continue
+
             # this is the new/cleaned pdb file with reordered chains and non-negative residue numbers
             pdb_path = os.path.join(args.cleaned_pdb_dir, f"{pdb_id.lower()}.pdb")
-            print(f"New peptide chains for {pdb_id}: {new_pep_chains_mapping}")
 
-            pep_chain = new_pep_chains_mapping.get(old_peptide_chain_id)
-            assert pep_chain == 'A', f"Expected new peptide chain ID to be 'A', but got {pep_chain} for {pdb_id}"
+            pep_chain = 'A' # after cleaning, the peptide chain should be renamed to A
             total_residues, chain_res_str, fixed_chain_res_str = process_one_pdb(pdb_path, pep_chain)
             print(f"{pdb_id}: Total residues={total_residues}, Chain residue string={chain_res_str}, Fixed chain residue string={fixed_chain_res_str}")
 
@@ -213,6 +230,8 @@ def main():
                 "peptide_sequence": peptide_seq,
                 "chain_res_str": chain_res_str,
                 "fixed_chain_res_str": fixed_chain_res_str,
+                "entity_mapping": str(entities),
+                "chain_label_id_mapping": str(old_to_new_chain_label_ids)
             })
 
     # save result to CSV
