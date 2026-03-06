@@ -62,7 +62,11 @@ def load_peptide_info(path: str) -> Dict[str, List[str]]:
         return result
 
 def process_one_pdb(pdb_path: str, peptide_chain_id: str) -> Tuple[int, str]:
-    structure = PDBParser(QUIET=True).get_structure("structure", pdb_path)
+    try:
+        structure = PDBParser(QUIET=True).get_structure("structure", pdb_path)
+    except Exception as e:
+        print(f"Error parsing {pdb_path}: {e}")
+        return None, None, None
     model = next(structure.get_models())
 
     total_residues = 0
@@ -220,6 +224,10 @@ def main():
 
             pep_chain = 'A' # after cleaning, the peptide chain should be renamed to A
             total_residues, chain_res_str, fixed_chain_res_str = process_one_pdb(pdb_path, pep_chain)
+            
+            if total_residues is None:
+                print(f"Warning! Skipping {pdb_id} as processing failed.")
+                continue
             print(f"{pdb_id}: Total residues={total_residues}, Chain residue string={chain_res_str}, Fixed chain residue string={fixed_chain_res_str}")
 
             # add to result

@@ -157,9 +157,9 @@ def parse_cif_and_clean(input_cif, output_pdb, peptide_chain):
         
         sorted_chains = sorted(
             chains,  
-            # when peptide chain extracted in ./curate_dataset/curate_dataset.py, auth_chain was used
-            # if the chain is the peptide chain's auth id matches the peptide chain, and it is a protein chain (exists in entity mapping), then place it first, otherwise sort by original chain ID
-            # chains that are not in the entity mapping (e.g. water, ligand) to the end of the sorted list, and sort them by original chain ID as well
+            # when peptide chain extracted in ./curate_dataset/curate_dataset.py, auth_asym_id was used
+            # if the chain's auth id matches the peptide chain, and it is a peptide chain (exists in entity mapping), then place it first, otherwise sort by original chain ID
+            # chains that are not in the entity mapping (e.g. water, ligand) are placed at the end of the sorted list, and sort them by original chain ID as well
             key=lambda c: (0 if chain_label_id_to_auth_id[c.id] == peptide_chain and c.id in entities else 1 if c.id in entities else 2, c.id)
         )
         print(f"Old sorted chain label ids: {[c.id for c in sorted_chains]}")
