@@ -12,24 +12,6 @@ import pandas as pd
 import argparse
 from typing import Optional
 import os
-import tempfile
-from Bio.PDB import MMCIFParser, PDBIO
-
-VERBOSE = False
-
-def load_metadata(csv_path):
-    """Load and preprocess multiconf metadata for alignment indices."""
-
-    df = pd.read_csv(csv_path)
-    metadata = {}
-
-    for _, row in df.iterrows():
-        key = row["pdb_id"].strip()
-        metadata[key] = {
-            "alignment_idx": [int(x) for x in str(row["alignment_idx"]).split(",") if x != "" and x != "nan"],
-        }
-
-    return metadata
 
 
 def find_model_pdbs(out_dir: Path) -> Path:
@@ -47,7 +29,7 @@ def find_model_pdbs(out_dir: Path) -> Path:
     return None
 
 
-def process_out_root(metadata: dict, out_root: Path, summary_csv: Path, is_localunfolding=False) -> int:
+def process_out_root(out_root: Path, summary_csv: Path, is_localunfolding=False) -> int:
     """Go through alphafold output root and compute RMSDs, parse pLDDT info, writing summary CSV."""
    
     rows = []
@@ -122,18 +104,6 @@ def main() -> int:
         required=True,
         help="Root directory containing <seq_id>_results directories (or dataset/<seq_id>_results)",
     )
-    parser.add_argument(
-        "--dataset_name",
-        type=str,
-        default="peptide_ensemble",
-        help="Name of the dataset to process (default: peptide_ensemble)",
-    )
-    parser.add_argument(
-        "--processed_data_location",
-        type=str,
-        default="./subset_processed_data/",
-        help="Directory storing processed data",
-    )
     parser.add_argument("--output_csv_dir", 
         type=str,
         default="./",
@@ -157,20 +127,7 @@ def main() -> int:
     else:
         summary = out_root / args.csv_name
 
-    dataset_mapping = {
-        "peptide_ensemble": "synthetic_ensemble",
-        "peptide_baseline": "orig_structures",
-    }
-
-    ### load benchmark metadata ###
-    metadata_path = os.path.join(
-        args.processed_data_location,
-        dataset_mapping[args.dataset_name],
-        "multiconf_metadata.csv",
-    )
-
-    metadata = load_metadata(metadata_path)
-    return process_out_root(metadata, out_root, summary)
+    return process_out_root(out_root, summary)
 
 if __name__ == "__main__":
     raise SystemExit(main())
