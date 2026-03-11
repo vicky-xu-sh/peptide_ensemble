@@ -1,23 +1,17 @@
-"""
-Compute rmsd of between structure and reference pdb. Parse results (pLDDT, pTM).
-
-"""
-
-import mdtraj as md
 from pathlib import Path
 import numpy as np
 import csv
 import re
-import pandas as pd
 import argparse
-from typing import Optional
 import os
+from Bio.PDB import PDBParser
 
 
 def find_model_pdbs(out_dir: Path) -> Path:
     """Find the 'rank_001' model pdb files under a ColabFold output directory."""
-    pats = list(out_dir.glob("**/*.pdb"))
+    pats = list(out_dir.glob("*.pdb"))
     if not pats:
+        print(f"WARNING: no pdb files in {out_dir}")
         return None
 
     # Return only best-ranked model: filename contains 'rank_001'
@@ -26,6 +20,7 @@ def find_model_pdbs(out_dir: Path) -> Path:
         return rank1[0]
 
     # If none found, return empty so caller can skip (strict behavior requested)
+    print(f"WARNING: No rank_001 model pdb found under {out_dir}, skipping")
     return None
 
 
@@ -65,14 +60,19 @@ def process_out_root(out_root: Path, summary_csv: Path, is_localunfolding=False)
         model_pdb = find_model_pdbs(base_out)
         if model_pdb is not None:
             try:
-                traj = md.load(model_pdb)
-                # get CA atoms of peptide chain (chain A)
-                peptide_chains = [c for c in traj.topology.chains if c.name == "A"]
-                if peptide_chains:
-                    ca_atoms = [a for c in peptide_chains for a in c.atoms if a.name == "CA"]
-                    if ca_atoms:
-                        pep_plddt_vals = [a.bfactor for a in ca_atoms]
-                        pep_plddt_val = np.mean(pep_plddt_vals)
+                structure = PDBParser(QUIET=True).get_structure("structure", model_pdb)
+                model = next(structure.get_models())
+                for chain in model:
+                    if chain.id == "A":  # assuming peptide chain is labeled 'A'
+                        ca_atoms = [res["CA"] for res in chain if "CA" in res]
+                        if ca_atoms:
+                            pep_plddt_vals = [a.bfactor for a in ca_atoms]
+                            pep_plddt_val = np.mean(pep_plddt_vals)
+                        else:
+                            print(f"No CA atoms found in chain A of {model_pdb}, skipping peptide pLDDT calculation")
+                        break
+                    else:
+                        print(f"No CA atoms found in chain A of {model_pdb}, skipping peptide pLDDT calculation")
             except Exception:
                 pass
 
@@ -82,12 +82,12 @@ def process_out_root(out_root: Path, summary_csv: Path, is_localunfolding=False)
             "plddt": plddt_val,
             "ptm": ptm_val,
             "iptm": iptm_val,
-            "peptide plddt": pep_plddt_val
+            "peptide_plddt": pep_plddt_val
         })
     
 
     # write CSV
-    fieldnames = ["id", "plddt", "ptm", "iptm", "peptide plddt"]
+    fieldnames = ["id", "plddt", "ptm", "iptm", "peptide_plddt"]
     with summary_csv.open("w", newline="") as wf:
         w = csv.DictWriter(wf, fieldnames=fieldnames)
         w.writeheader()
@@ -99,7 +99,7 @@ def process_out_root(out_root: Path, summary_csv: Path, is_localunfolding=False)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Compute RMSD and pLDDT metrics from ColabFold af-multimer outputs")
+    parser = argparse.ArgumentParser(description="Parse and compute pLDDT metrics from ColabFold af-multimer outputs")
     parser.add_argument("--out_root", 
         required=True,
         help="Root directory containing <seq_id>_results directories (or dataset/<seq_id>_results)",
