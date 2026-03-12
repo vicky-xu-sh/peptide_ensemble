@@ -99,7 +99,7 @@ def process_out_root(out_root: Path, summary_csv: Path, is_localunfolding=False)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Parse and compute pLDDT metrics from ColabFold af-multimer outputs")
+    parser = argparse.ArgumentParser(description="Parse and compute metrics from ColabFold af-multimer outputs")
     parser.add_argument("--out_root", 
         required=True,
         help="Root directory containing <seq_id>_results directories (or dataset/<seq_id>_results)",

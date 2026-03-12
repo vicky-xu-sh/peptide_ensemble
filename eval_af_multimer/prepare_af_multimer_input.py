@@ -148,7 +148,7 @@ if __name__ == "__main__":
         "--designed_sequences_fasta",
         type=str,
         required=True,
-        help="Path to fasta file containing designed sequences for the chain of interest.",
+        help="Path to a fasta file containing designed sequences for the chain of interest.",
     )
     parser.add_argument(
         "--orig_pdb_dir", 
